@@ -1,9 +1,14 @@
 name: assignment-autotest-test
-on: [push]
+on:
+    push:
+        tags-ignore:
+            - '*'
+        branches:
+            - '*'
 jobs:
-    test:
+    unit-test:
         container: cuaesd/aesd-autotest:unit-test
-        runs-on: ubuntu-latest
+        runs-on: self-hosted
         steps:
           - uses: actions/checkout@v2
           - name: Checkout submodules
