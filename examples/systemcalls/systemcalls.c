@@ -1,4 +1,8 @@
 #include "systemcalls.h"
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <fcntl.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -9,15 +13,16 @@
 */
 bool do_system(const char *cmd)
 {
-
 /*
  * TODO  add your code here
  *  Call the system() function with the command set in the cmd
- *   and return a boolean true if the system() call completed with success
- *   or false() if it returned a failure
+ *   and return a boolean true (1) if the system() call completed with success
+ *   or false() (0) if it returned a failure
 */
-
-    return true;
+    // Using ternary operator, if:
+        // systems(cmd) == 0 -> That's a Sucess! Return True
+        // systems(cmd) =! 0 -> That's a Failure! Return False
+    return system(cmd) == 0;
 }
 
 /**
@@ -33,7 +38,6 @@ bool do_system(const char *cmd)
 *   fork, waitpid, or execv() command, or if a non-zero return value was returned
 *   by the command issued in @param arguments with the specified arguments.
 */
-
 bool do_exec(int count, ...)
 {
     va_list args;
@@ -45,10 +49,6 @@ bool do_exec(int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
 /*
  * TODO:
  *   Execute a system command by calling fork, execv(),
@@ -58,10 +58,28 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
-
+    fflush(stdout); // Avoiding duplicated prints
+    pid_t pid = fork();
+    int status;
+    switch (pid) {
+    // Fork failure
+    case -1:
+        perror("fork");
+        return false;
+    // Child process: execute command
+    case 0:
+        execv(command[0], command);
+        exit(EXIT_FAILURE);
+    // Parent process: wait for child matching PID die
+    default:
+        if (waitpid(pid, &status, 0) < 0) {
+            perror("waitpid");
+            return false;
+        }
+        if (WIFEXITED(status)) return WEXITSTATUS(status) == 0;
+    }
     va_end(args);
-
-    return true;
+    return false;
 }
 
 /**
@@ -80,11 +98,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
-
 /*
  * TODO
  *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
@@ -92,8 +105,36 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
-
+    fflush(stdout); // Avoiding duplicated prints
+    // Openning file and checking it the process 
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    if (fd < 0){ perror("open"); return false; }
+    // Cloning the calling process by fork
+    pid_t pid = fork();
+    switch (pid) {
+    // Fork failure
+    case -1: 
+        perror("fork");
+        return false;
+    // Child process: write in the file
+    case 0:
+        if (dup2(fd, STDOUT_FILENO) < 0){
+            perror("dup2");
+            return false;
+        }
+        close(fd);
+        execvp(command[0], command);
+        exit(EXIT_FAILURE);
+    // Parent process: wait for child matching PID die
+    default:
+        close(fd);
+        int status;
+        if (waitpid(pid, &status, 0) < 0){
+            return false;
+        } else if (WIFEXITED(status)){
+            return WEXITSTATUS(status) == 0;
+        }
+    }
     va_end(args);
-
     return true;
 }
